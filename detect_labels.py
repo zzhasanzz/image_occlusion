@@ -1,4 +1,5 @@
 import easyocr, os, cv2, re, json, numpy as np
+import torch
 from collections import defaultdict
 
 def is_number_bubble(t):
@@ -100,6 +101,8 @@ def process_image(image_path, reader):
     return merged
 
 def detect_labels(folder_path, output_json="merged_boxes_all.json"):
+    use_gpu = torch.cuda.is_available()
+    print(f"🔍 torch.cuda.is_available() => {use_gpu}")
     reader = easyocr.Reader(['en'], gpu=True)
     image_files = [f for f in os.listdir(folder_path) if f.lower().endswith(('.png','.jpg','.jpeg'))]
     all_data = {}
