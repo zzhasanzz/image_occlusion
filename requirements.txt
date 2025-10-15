@@ -1,5 +1,7 @@
 torch
 transformers
+sentence-transformers
+faiss-cpu
 pillow
 numpy
 matplotlib
@@ -7,3 +9,4 @@ opencv-python-headless
 PyMuPDF
 easyocr
 timm
+textwrap3
