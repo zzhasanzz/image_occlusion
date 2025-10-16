@@ -19,7 +19,7 @@ if __name__ == "__main__":
         start_page, end_page = int(sys.argv[1]), int(sys.argv[2])
 
     # Step 1–4: existing pipeline
-    extract_figures_from_pdf(PDF_PATH, FIGURES_DIR, page_range=range(start_page, end_page + 1))
+    extract_figures_from_pdf(PDF_PATH, FIGURES_DIR, page_range=range(start_page - 1, end_page))
     detect_labels(FIGURES_DIR, JSON_PATH)
     visualize_boxes(FIGURES_DIR, JSON_PATH, "output/annotated")
     generate_flashcards(FIGURES_DIR, JSON_PATH, "output/flashcards")
@@ -35,6 +35,7 @@ if __name__ == "__main__":
         json_path=JSON_PATH,
         index_path=f"{DATA_DIR}/faiss.index",
         meta_path=f"{DATA_DIR}/index.pkl",
+        use_gemini=True
     )
 
     print("\n🧠 Smart query:", smart_q)

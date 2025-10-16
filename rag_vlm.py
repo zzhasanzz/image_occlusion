@@ -2,6 +2,22 @@ import os, json, pickle, faiss, numpy as np, textwrap, torch
 from PIL import Image
 from sentence_transformers import SentenceTransformer
 from transformers import AutoProcessor, Qwen2VLForConditionalGeneration
+from dotenv import load_dotenv
+import google.generativeai as genai
+import io
+
+load_dotenv() 
+API_KEY = os.getenv("GEMINI_API_KEY")
+if not API_KEY:
+    raise ValueError(" GEMINI_API_KEY not found in environment variables.")
+
+genai.configure(api_key=API_KEY)
+MODEL_NAME = "gemini-2.5-flash-lite"  
+
+def load_gemini(model_name=MODEL_NAME):
+    model = genai.GenerativeModel(model_name)
+    return model
+
 
 EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 MAX_NEW_TOKENS = 512
@@ -107,9 +123,28 @@ def generate_answer(img, prompt, processor, model):
         with torch.inference_mode():
             out = model.generate(**inputs, max_new_tokens=MAX_NEW_TOKENS, temperature=0.7, top_p=0.9)
         return processor.batch_decode(out, skip_special_tokens=True)[0]
+    
+
+def generate_answer_gemini(img, prompt, model):
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    image_bytes = buffer.getvalue()
+
+    response = model.generate_content(
+        [
+            {"mime_type": "image/png", "data": image_bytes},
+            prompt
+        ],
+        generation_config={
+            "temperature": 0.2,
+            "top_p": 0.9,
+            "max_output_tokens": 512
+        }
+    )
+    return response.text
 
 def answer_from_image_and_query(
-    image_path, user_query, json_path, index_path, meta_path, pdf_path_for_source=None
+    image_path, user_query, json_path, index_path, meta_path, pdf_path_for_source=None, use_gemini=True
 ):
     # 1) smart query
     image_name = os.path.basename(image_path)
@@ -120,12 +155,17 @@ def answer_from_image_and_query(
     embedder = load_embedder()
     hits = retrieve_context(index, embedder, documents, metadata, smart_query, top_k=TOP_K)
     context = "\n\n".join([h["text"] for h in hits]) if hits else ""
+    prompt = make_prompt(context, user_query)
 
     # 3) VLM
     img = Image.open(image_path).convert("RGB")
-    processor, model = load_qwen()
-    prompt = make_prompt(context, user_query)
-    resp = generate_answer(img, prompt, processor, model)
+
+    if use_gemini:
+        model = load_gemini()
+        resp = generate_answer_gemini(img, prompt, model)
+    else:
+        processor, model = load_qwen()
+        resp = generate_answer(img, prompt, processor, model)
 
     # Optional: show what was used
     preview = "\n".join([f"[{h['rank']}] {h['source']} (d={h['distance']:.3f})" for h in hits])
