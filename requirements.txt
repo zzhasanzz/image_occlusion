@@ -10,3 +10,5 @@ PyMuPDF
 easyocr
 timm
 textwrap3
+accelerate
+qwen-vl-utils

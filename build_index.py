@@ -1,4 +1,3 @@
-# build_index.py
 import os, pickle, faiss, fitz, textwrap
 from sentence_transformers import SentenceTransformer
 
