@@ -30,52 +30,80 @@ def is_invalid_label(text: str) -> bool:
 
 
 # ─────────────────────────────────────────────────────────────
-# 🔹 Overlay Function
+# 🔹 Solid Color Overlay Function
 # ─────────────────────────────────────────────────────────────
 def apply_flashcard_mask(img, boxes, highlight_idx, reveal=False):
     """
-    If reveal=False → draw orange masks + crimson border (question)
+    If reveal=False → draw solid glass-colored masks + dark blue border (question)
     If reveal=True  → mask everything except the highlighted box (answer)
     """
     overlay = img.copy()
-    dark_orange = (0, 110, 220)     # non-question fill
-    highlight_fill = (0, 180, 255)  # question fill color
-    crimson = (30, 20, 180)         # border color
-    alpha = 1.0
-
-    # fill all boxes with dark orange
-    for b in boxes:
-        (x1, y1, x2, y2) = b["bbox"]
-        cv2.rectangle(overlay, (x1, y1), (x2, y2), dark_orange, -1)
-
-    (x1, y1, x2, y2) = boxes[highlight_idx]["bbox"]
-    text = boxes[highlight_idx].get("text", "")
-
+    
+    # Colors for solid masks and borders
+    glass_color = (200, 220, 240)  # Light blue glass color (BGR)
+    dark_blue = (139, 0, 0)  # Dark blue for borders (BGR: 139, 0, 0)
+    highlight_border = (255, 191, 0)  # Light blue for highlighted border (BGR: 255, 191, 0)
+    
     if not reveal:
-        # QUESTION MODE — highlight one region
-        cv2.rectangle(overlay, (x1, y1), (x2, y2), highlight_fill, -1)
-        blended = cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0)
-        cv2.rectangle(blended, (x1, y1), (x2, y2), crimson, 2)
-
-        # add adaptive question marks
-        font_scale = max(0.5, (x2 - x1) / 150)
-        thickness = 2
-        text_size = cv2.getTextSize("???", cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)[0]
-        tx = x1 + (x2 - x1 - text_size[0]) // 2
-        ty = y1 + (y2 - y1 + text_size[1]) // 2
-        cv2.putText(
-            blended, "???", (tx, ty),
-            cv2.FONT_HERSHEY_SIMPLEX, font_scale,
-            (255, 255, 255), thickness, cv2.LINE_AA
-        )
+        # QUESTION MODE - Apply solid color to all boxes
+        for idx, b in enumerate(boxes):
+            (x1, y1, x2, y2) = b["bbox"]
+            
+            # Apply SOLID glass color to completely hide underlying text
+            cv2.rectangle(overlay, (x1, y1), (x2, y2), glass_color, -1)
+            
+            # Add dark blue border to all boxes
+            border_color = highlight_border if idx == highlight_idx else dark_blue
+            border_thickness = 3 if idx == highlight_idx else 1
+            cv2.rectangle(overlay, (x1, y1), (x2, y2), border_color, border_thickness)
+            
+            # Add adaptive question marks to the highlighted box only
+            if idx == highlight_idx:
+                # Calculate font scale based on box size
+                box_width = x2 - x1
+                box_height = y2 - y1
+                
+                # Adaptive font scale based on box dimensions
+                font_scale = max(0.4, min(box_width / 200, box_height / 80))
+                thickness = max(1, int(font_scale * 2))
+                
+                # Add multiple question marks for better visibility
+                question_text = "???"
+                text_size = cv2.getTextSize(question_text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)[0]
+                
+                # Center the text in the box
+                tx = x1 + (box_width - text_size[0]) // 2
+                ty = y1 + (box_height + text_size[1]) // 2
+                
+                # Add dark blue text with white outline for maximum contrast
+                # White outline
+                cv2.putText(
+                    overlay, question_text, (tx, ty),
+                    cv2.FONT_HERSHEY_SIMPLEX, font_scale,
+                    (255, 255, 255), thickness + 2, cv2.LINE_AA
+                )
+                # Dark blue text
+                cv2.putText(
+                    overlay, question_text, (tx, ty),
+                    cv2.FONT_HERSHEY_SIMPLEX, font_scale,
+                    (139, 0, 0), thickness, cv2.LINE_AA
+                )
 
     else:
-        # ANSWER MODE — unmask the correct label region (reveal original)
-        blended = cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0)
-        blended[y1:y2, x1:x2] = img[y1:y2, x1:x2]  # restore original label region
-        cv2.rectangle(blended, (x1, y1), (x2, y2), crimson, 2)
+        # ANSWER MODE - Apply solid color to all boxes EXCEPT the highlighted one
+        for idx, b in enumerate(boxes):
+            (x1, y1, x2, y2) = b["bbox"]
+            
+            if idx != highlight_idx:
+                # Apply SOLID glass color to completely hide underlying text
+                cv2.rectangle(overlay, (x1, y1), (x2, y2), glass_color, -1)
+            
+            # Add borders to all boxes
+            border_color = highlight_border if idx == highlight_idx else dark_blue
+            border_thickness = 2 if idx == highlight_idx else 1
+            cv2.rectangle(overlay, (x1, y1), (x2, y2), border_color, border_thickness)
 
-    return blended
+    return overlay
 
 
 # ─────────────────────────────────────────────────────────────
@@ -102,16 +130,16 @@ def generate_flashcards(images_folder, json_path, output_folder="flashcards"):
         print(f"\n🧩 Generating flashcards for: {fname} ({len(valid_boxes)} valid labels)")
 
         for i, b in enumerate(valid_boxes):
-            # Question (masked)
+            # Question (masked with solid color)
             q_img = apply_flashcard_mask(img, valid_boxes, i, reveal=False)
             q_name = f"{os.path.splitext(fname)[0]}_q{i+1}.png"
             cv2.imwrite(os.path.join(output_folder, q_name), q_img)
 
-            # Answer (revealed)
+            # Answer (revealed with solid color on other labels)
             a_img = apply_flashcard_mask(img, valid_boxes, i, reveal=True)
             a_name = f"{os.path.splitext(fname)[0]}_q{i+1}_answer.png"
             cv2.imwrite(os.path.join(output_folder, a_name), a_img)
 
             print(f"✅ Saved: {q_name} & {a_name}")
 
-    print(f"\n🎯 Done! All flashcards and answers saved in '{output_folder}/'")
+    print(f"\n🎯 Done! All solid-mask flashcards saved in '{output_folder}/'")
