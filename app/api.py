@@ -7,6 +7,7 @@ from detect_labels import detect_labels
 from visualize_boxes import visualize_boxes
 from generate_flashcards import generate_flashcards
 from starlette.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="Anatomy Tutor API", version="1.0")
 
@@ -79,3 +80,27 @@ async def download_folder(folder: str):
     zip_path = f"{folder_path}.zip"
     shutil.make_archive(folder_path, 'zip', folder_path)
     return FileResponse(zip_path, filename=os.path.basename(zip_path))
+
+
+@app.get("/preview/{folder}")
+async def preview_folder(folder: str):
+    """
+    Return a list of image file URLs for the selected folder.
+    Frontend can use these URLs to render thumbnails.
+    """
+    if folder not in ["figures_v2", "flashcards", "annotated"]:
+        return JSONResponse(content={"error": "Invalid folder"}, status_code=400)
+
+    folder_path = os.path.join(OUTPUT_DIR, folder)
+    if not os.path.exists(folder_path):
+        return JSONResponse(content={"error": "Folder not found"}, status_code=404)
+
+    files = [
+        f"/static/{folder}/{fname}"
+        for fname in sorted(os.listdir(folder_path))
+        if fname.lower().endswith((".png", ".jpg", ".jpeg"))
+    ]
+    return JSONResponse(content={"count": len(files), "images": files})
+
+# Serve the static images from the output directory
+app.mount("/static", StaticFiles(directory=OUTPUT_DIR), name="static")
