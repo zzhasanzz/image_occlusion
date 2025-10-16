@@ -1,4 +1,4 @@
-import os, shutil, tempfile
+import os, shutil, tempfile, json
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, Form
 from fastapi.responses import FileResponse, JSONResponse
@@ -131,6 +131,71 @@ async def list_images():
 
     return {"count": len(files), "images": files}
 
+@app.get("/chat/get_bounding_boxes")
+async def get_bounding_boxes(image_name: str = None):
+    """
+    Return bounding boxes for images.
+    If image_name is provided, return boxes for that specific image.
+    If no image_name, return all bounding boxes.
+    """
+    if not JSON_PATH.exists():
+        return JSONResponse(
+            {"error": "Bounding boxes file not found. Please process a PDF first."}, 
+            status_code=404
+        )
+    
+    try:
+        with open(JSON_PATH, 'r', encoding='utf-8') as f:
+            all_boxes = json.load(f)
+        
+        # If specific image requested
+        if image_name:
+            if image_name in all_boxes:
+                return {
+                    "image_name": image_name,
+                    "boxes": all_boxes[image_name],
+                    "total_boxes": len(all_boxes[image_name])
+                }
+            else:
+                # Check if image exists but has no boxes
+                image_path = FIGURES_DIR / image_name
+                if image_path.exists():
+                    return {
+                        "image_name": image_name,
+                        "boxes": [],
+                        "total_boxes": 0,
+                        "message": "No bounding boxes found for this image"
+                    }
+                else:
+                    return JSONResponse(
+                        {"error": f"Image '{image_name}' not found"}, 
+                        status_code=404
+                    )
+        
+        # Return all boxes if no specific image requested
+        return {
+            "all_boxes": all_boxes,
+            "total_images": len(all_boxes),
+            "message": f"Found bounding boxes for {len(all_boxes)} images"
+        }
+        
+    except json.JSONDecodeError as e:
+        return JSONResponse(
+            {"error": f"Invalid JSON in bounding boxes file: {str(e)}"}, 
+            status_code=500
+        )
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"Failed to load bounding boxes: {str(e)}"}, 
+            status_code=500
+        )
+
+@app.get("/chat/get_all_bounding_boxes")
+async def get_all_bounding_boxes():
+    """
+    Return all bounding boxes for all images.
+    """
+    return await get_bounding_boxes()
 
 @app.post("/chat/chat_with_image")
 async def chat_with_image(user_query: str = Form(...),
@@ -162,3 +227,39 @@ async def chat_with_image(user_query: str = Form(...),
         }
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
+
+# ================================================================
+# 🔍 DEBUG ENDPOINTS (optional - for development)
+# ================================================================
+@app.get("/debug/bounding_boxes_status")
+async def debug_bounding_boxes_status():
+    """
+    Debug endpoint to check bounding boxes file status.
+    """
+    status = {
+        "json_path": str(JSON_PATH),
+        "json_exists": JSON_PATH.exists(),
+        "figures_dir": str(FIGURES_DIR),
+        "figures_exists": FIGURES_DIR.exists(),
+    }
+    
+    if JSON_PATH.exists():
+        try:
+            with open(JSON_PATH, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            status.update({
+                "total_images_with_boxes": len(data),
+                "sample_images": list(data.keys())[:3] if data else []
+            })
+        except Exception as e:
+            status["json_error"] = str(e)
+    
+    if FIGURES_DIR.exists():
+        image_files = [f for f in os.listdir(FIGURES_DIR) 
+                      if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+        status.update({
+            "total_images_in_folder": len(image_files),
+            "sample_images_in_folder": image_files[:3] if image_files else []
+        })
+    
+    return status
