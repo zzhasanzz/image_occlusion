@@ -5,7 +5,7 @@ from sentence_transformers import SentenceTransformer, util
 # ------------------------------------------------------------
 # CONFIG
 # ------------------------------------------------------------
-MERGED_FILE = "output/merged_boxes_all.json"             # from your OCR output
+MERGED_FILE = "output/anatomy_v3_merged_boxes_all.json"             # from your OCR output
 PKL_FILE = "data/classified_anatomy_mammoth.pkl"       # built using build_anatomy_pkl.py
 OUTPUT_FILE = "output/figure_category_map.json"          # final one-category-per-figure map
 

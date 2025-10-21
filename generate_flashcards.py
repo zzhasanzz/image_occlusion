@@ -109,9 +109,15 @@ def apply_flashcard_mask(img, boxes, highlight_idx, reveal=False):
 # ─────────────────────────────────────────────────────────────
 # 🔹 Main Generator
 # ─────────────────────────────────────────────────────────────
-def generate_flashcards(images_folder, json_path, output_folder="flashcards"):
+import os, json, cv2
+
+def generate_flashcards(images_folder, json_path, output_folder="flashcards", book_name="Unknown_Book"):
+    """
+    Generate question/answer flashcards for each figure.
+    Prevents book name duplication in filenames.
+    """
     os.makedirs(output_folder, exist_ok=True)
-    with open(json_path, "r") as f:
+    with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     for img_idx, (fname, boxes) in enumerate(list(data.items())):
@@ -121,7 +127,7 @@ def generate_flashcards(images_folder, json_path, output_folder="flashcards"):
             print(f"⚠️ Skipped: {fname}")
             continue
 
-        # filter out invalid boxes
+        # Filter invalid boxes
         valid_boxes = [b for b in boxes if not is_invalid_label(b.get("text", ""))]
         if not valid_boxes:
             print(f"⚠️ No valid labels found for {fname}, skipping.")
@@ -129,17 +135,27 @@ def generate_flashcards(images_folder, json_path, output_folder="flashcards"):
 
         print(f"\n🧩 Generating flashcards for: {fname} ({len(valid_boxes)} valid labels)")
 
-        for i, b in enumerate(valid_boxes):
-            # Question (masked with solid color)
-            q_img = apply_flashcard_mask(img, valid_boxes, i, reveal=False)
-            q_name = f"{os.path.splitext(fname)[0]}_q{i+1}.png"
-            cv2.imwrite(os.path.join(output_folder, q_name), q_img)
+        # Create subfolder for this book
+        book_folder = os.path.join(output_folder, book_name)
+        os.makedirs(book_folder, exist_ok=True)
 
-            # Answer (revealed with solid color on other labels)
+        # ✅ Remove book name prefix if already in filename
+        base_name = os.path.splitext(fname)[0]
+        if base_name.startswith(book_name):
+            base_name = base_name[len(book_name):].lstrip("_")
+
+        for i, b in enumerate(valid_boxes):
+            # Question (masked)
+            q_img = apply_flashcard_mask(img, valid_boxes, i, reveal=False)
+            q_name = f"{book_name}_{base_name}_q{i+1}.png"
+            cv2.imwrite(os.path.join(book_folder, q_name), q_img)
+
+            # Answer (revealed)
             a_img = apply_flashcard_mask(img, valid_boxes, i, reveal=True)
-            a_name = f"{os.path.splitext(fname)[0]}_q{i+1}_answer.png"
-            cv2.imwrite(os.path.join(output_folder, a_name), a_img)
+            a_name = f"{book_name}_{base_name}_q{i+1}_answer.png"
+            cv2.imwrite(os.path.join(book_folder, a_name), a_img)
 
             print(f"✅ Saved: {q_name} & {a_name}")
 
-    print(f"\n🎯 Done! All solid-mask flashcards saved in '{output_folder}/'")
+    print(f"\n🎯 Done! Flashcards saved in '{output_folder}/{book_name}/'")
+
