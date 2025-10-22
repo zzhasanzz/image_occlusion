@@ -64,11 +64,11 @@ def apply_flashcard_mask(img, boxes, highlight_idx, reveal=False):
                 box_height = y2 - y1
                 
                 # Adaptive font scale based on box dimensions
-                font_scale = max(0.4, min(box_width / 200, box_height / 80))
+                font_scale = max(0.6, min(box_width / 180, box_height / 60))
                 thickness = max(1, int(font_scale * 2))
                 
                 # Add multiple question marks for better visibility
-                question_text = "???"
+                question_text = "??Guess??"
                 text_size = cv2.getTextSize(question_text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)[0]
                 
                 # Center the text in the box
@@ -86,7 +86,7 @@ def apply_flashcard_mask(img, boxes, highlight_idx, reveal=False):
                 cv2.putText(
                     overlay, question_text, (tx, ty),
                     cv2.FONT_HERSHEY_SIMPLEX, font_scale,
-                    (139, 0, 0), thickness, cv2.LINE_AA
+                    (220, 20, 60), thickness, cv2.LINE_AA
                 )
 
     else:
