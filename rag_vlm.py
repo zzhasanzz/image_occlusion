@@ -70,8 +70,7 @@ def build_retrieval_query_from_json(image_name, user_query, json_path):
 def make_prompt(context, user_query):
     return f"""
 You are an experienced anatomy tutor.
-Use the textbook excerpts to answer accurately and tie your answer to the visible anatomy in the image.
-Write a clear, instructional explanation (6–8 sentences).
+Use the textbook excerpts to answer precisely and tie your answer to the visible anatomy in the image.
 
 Textbook context:
 {context}
