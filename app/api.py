@@ -592,7 +592,7 @@ async def get_due_flashcards(book_name: str):
 
 
 # ================================================================
-# 🧩 POST /flashcards/feedback
+# 🧩 POST /flashcards/feedback  +  📊 Analytics Tracking
 # ================================================================
 @app.post("/flashcards/feedback")
 async def update_flashcard_feedback(
@@ -601,13 +601,15 @@ async def update_flashcard_feedback(
     feedback: str = Form(...)
 ):
     """
-    Update flashcard difficulty and next_repeat_date
+    Update flashcard difficulty, next_repeat_date, and analytics
     based on user feedback (easy / normal / hard / repeat).
     """
     try:
         book_folder = FLASHCARDS_BASE / book_name
         state_file = book_folder / f"{book_name}_flashcards.json"
+        analytics_file = book_folder / f"{book_name}_analytics.json"
 
+        # ---------------- Load or Validate State ----------------
         if not state_file.exists():
             return JSONResponse({"error": f"State file not found for book '{book_name}'"}, status_code=404)
 
@@ -616,10 +618,10 @@ async def update_flashcard_feedback(
 
         if question_file not in cards:
             return JSONResponse({"error": f"Flashcard '{question_file}' not found."}, status_code=404)
-
         if feedback not in INTERVALS:
             return JSONResponse({"error": f"Invalid feedback: {feedback}"}, status_code=400)
 
+        # ---------------- Update Flashcard Info ----------------
         delta_days = INTERVALS[feedback]
         next_date = datetime.date.today() + datetime.timedelta(days=delta_days)
         cards[question_file]["difficulty"] = feedback
@@ -628,13 +630,89 @@ async def update_flashcard_feedback(
         with open(state_file, "w", encoding="utf-8") as f:
             json.dump(cards, f, indent=2, ensure_ascii=False)
 
+        # =======================================================
+        # 📊 Update or Initialize Analytics
+        # =======================================================
+        today = datetime.date.today().isoformat()
+
+        # Initialize if missing
+        if not analytics_file.exists():
+            analytics = {
+                "book_name": book_name,
+                "last_updated": today,
+                "stats": {
+                    "total_flashcards": len(cards),
+                    "total_reviewed": 0,
+                    "easy": 0,
+                    "normal": 0,
+                    "hard": 0,
+                    "repeat": 0
+                },
+                "history": [],
+                "page_stats": {}
+            }
+        else:
+            with open(analytics_file, "r", encoding="utf-8") as f:
+                analytics = json.load(f)
+
+        # --- Update global counters ---
+        analytics["stats"]["total_reviewed"] += 1
+        analytics["stats"][feedback] += 1
+        analytics["last_updated"] = today
+
+        # --- Update per-page counters ---
+        page = cards[question_file].get("page", "unknown")
+        if page not in analytics["page_stats"]:
+            analytics["page_stats"][page] = {
+                "reviewed": 0, "easy": 0, "normal": 0, "hard": 0, "repeat": 0
+            }
+        analytics["page_stats"][page]["reviewed"] += 1
+        analytics["page_stats"][page][feedback] += 1
+
+        # --- Update daily history ---
+        day_entry = next((d for d in analytics["history"] if d["date"] == today), None)
+        if not day_entry:
+            day_entry = {"date": today, "reviewed_today": 0, "easy": 0, "normal": 0, "hard": 0, "repeat": 0}
+            analytics["history"].append(day_entry)
+        day_entry["reviewed_today"] += 1
+        day_entry[feedback] += 1
+
+        # --- Save analytics ---
+        with open(analytics_file, "w", encoding="utf-8") as f:
+            json.dump(analytics, f, indent=2, ensure_ascii=False)
+
+        print(f"📈 Analytics updated for {book_name} → {feedback} on {question_file}")
+
+        # ---------------- Return Response ----------------
         return {
             "status": "✅ updated",
             "book_name": book_name,
             "question": question_file,
             "difficulty": feedback,
-            "next_repeat_date": next_date.isoformat()
+            "next_repeat_date": next_date.isoformat(),
+            "updated_stats": analytics["stats"],
+            "today_summary": day_entry
         }
 
     except Exception as e:
         return JSONResponse({"error": f"Failed to update feedback: {e}"}, status_code=500)
+
+
+@app.get("/flashcards/analytics/{book_name}")
+async def get_flashcard_analytics(book_name: str):
+    """Return cumulative and daily analytics for a given book."""
+    analytics_file = FLASHCARDS_BASE / book_name / f"{book_name}_analytics.json"
+    if not analytics_file.exists():
+        return JSONResponse({"error": f"No analytics found for '{book_name}'"}, status_code=404)
+
+    with open(analytics_file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    return {
+        "book_name": data.get("book_name"),
+        "last_updated": data.get("last_updated"),
+        "stats": data.get("stats"),
+        "history": data.get("history")[-7:],  # last 7 days only
+        "page_stats": data.get("page_stats")
+    }
+
